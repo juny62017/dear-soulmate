@@ -5,6 +5,28 @@
   let W, H, dpr;
   let tiltX = 0, tiltY = 0;
 
+  const NS = 160;
+  const stX = new Float32Array(NS), stY = new Float32Array(NS),
+    stR = new Float32Array(NS), stSp = new Float32Array(NS),
+    stOf = new Float32Array(NS), stPr = new Float32Array(NS);
+  function initStars() {
+    for (let i = 0; i < NS; i++) {
+      stX[i] = Math.random() * W; stY[i] = Math.random() * H;
+      stR[i] = Math.random() * .9 + .2; stSp[i] = Math.random() * .01 + .003;
+      stOf[i] = Math.random() * 6.28; stPr[i] = Math.random() * .25 + .05;
+    }
+  }
+  function drawStars(t) {
+    ctx.fillStyle = '#fff'; ctx.globalAlpha = .55; ctx.beginPath();
+    for (let i = 0; i < NS; i++) {
+      const tw = Math.sin(t * stSp[i] * 60 + stOf[i]) * .22 + .78;
+      const px = stX[i] + tiltX * stPr[i], py = stY[i] + tiltY * stPr[i];
+      const rr = stR[i] * tw;
+      ctx.moveTo(px + rr, py); ctx.arc(px, py, rr, 0, 6.2832);
+    }
+    ctx.fill(); ctx.globalAlpha = 1;
+  }
+
   const soulA = {
     x: 0, y: 0, tx: 0, ty: 0, radius: 20, isDragging: false, touchId: null,
     r: 255, g: 105, b: 180, scaredVx: 0, scaredVy: 0, scared: false
@@ -41,6 +63,8 @@
     ctx.fillStyle = 'rgba(0,0,15,.15)';
     ctx.fillRect(0, 0, W, H);
 
+    drawStars(now);
+
     soulA.x += (soulA.tx - soulA.x) * .07; soulA.y += (soulA.ty - soulA.y) * .07;
     soulB.x += (soulB.tx - soulB.x) * .07; soulB.y += (soulB.ty - soulB.y) * .07;
 
@@ -56,6 +80,7 @@
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#00000f'; ctx.fillRect(0, 0, W, H);
+    initStars();
     placeSouls();
   }
 
