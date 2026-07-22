@@ -36,7 +36,41 @@
     r: 255, g: 60, b: 60, scaredVx: 0, scaredVy: 0, scared: false
   };
 
+  let merged = false, mergeTime = 0, lastInteract = 0;
+  let separating = false, separateStart = 0;
+  const mergeLock = { x: 0, y: 0 };
   let heartProgress = 0, heartFill = 0, heartScale = 0;
+
+  function drawThread(now, dist, thr) {
+    const op = Math.min(1, (thr - dist) / 60) * .4; if (op <= 0) return;
+    ctx.beginPath(); ctx.moveTo(soulA.x, soulA.y);
+    const mx = (soulA.x + soulB.x) / 2 + Math.sin(now * .003) * 10;
+    const my = (soulA.y + soulB.y) / 2 + Math.cos(now * .003) * 10;
+    ctx.quadraticCurveTo(mx, my, soulB.x, soulB.y);
+    ctx.strokeStyle = `rgba(255,255,255,${op.toFixed(3)})`;
+    ctx.lineWidth = 1.4; ctx.stroke();
+  }
+
+  function beginSeparation() {
+    if (!merged || separating) return;
+    separating = true;
+    separateStart = performance.now();
+  }
+
+  function finishSeparation() {
+    separating = false;
+    merged = false;
+    heartProgress = 0; heartFill = 0;
+    const cx = mergeLock.x, cy = mergeLock.y;
+    if (W < H) {
+      soulA.x = cx; soulA.y = cy - H * .2; soulA.tx = soulA.x; soulA.ty = soulA.y;
+      soulB.x = cx; soulB.y = cy + H * .2; soulB.tx = soulB.x; soulB.ty = soulB.y;
+    } else {
+      soulA.x = cx - W * .2; soulA.y = cy; soulA.tx = soulA.x; soulA.ty = soulA.y;
+      soulB.x = cx + W * .2; soulB.y = cy; soulB.tx = soulB.x; soulB.ty = soulB.y;
+    }
+    initParticles();
+  }
 
   const HEART_RES = 256;
   const hpx = new Float32Array(HEART_RES);
@@ -186,8 +220,60 @@
     drawStars(now);
     heartScale = computeHeartScale(now);
 
-    soulA.x += (soulA.tx - soulA.x) * .07; soulA.y += (soulA.ty - soulA.y) * .07;
-    soulB.x += (soulB.tx - soulB.x) * .07; soulB.y += (soulB.ty - soulB.y) * .07;
+    if (!merged) {
+      for (const s of [soulA, soulB]) {
+        if (!s.isDragging) {
+          s.scaredVx *= .85; s.scaredVy *= .85;
+          if (!s.scared) { s.tx += s.scaredVx * .3; s.ty += s.scaredVy * .3; }
+        }
+      }
+    }
+
+    if (separating) {
+      const t = Math.min(1, (now - separateStart) / 1200);
+      const spread = t * Math.min(W, H) * 0.22;
+      const angle = W < H ? Math.PI / 2 : 0;
+      const tx1 = mergeLock.x - Math.cos(angle) * spread, ty1 = mergeLock.y - Math.sin(angle) * spread;
+      const tx2 = mergeLock.x + Math.cos(angle) * spread, ty2 = mergeLock.y + Math.sin(angle) * spread;
+      soulA.x += (tx1 - soulA.x) * .07; soulA.y += (ty1 - soulA.y) * .07;
+      soulB.x += (tx2 - soulB.x) * .07; soulB.y += (ty2 - soulB.y) * .07;
+    } else if (merged) {
+      soulA.x += (mergeLock.x - soulA.x) * .07; soulA.y += (mergeLock.y - soulA.y) * .07;
+      soulB.x += (mergeLock.x - soulB.x) * .07; soulB.y += (mergeLock.y - soulB.y) * .07;
+    } else {
+      soulA.x += (soulA.tx - soulA.x) * .07; soulA.y += (soulA.ty - soulA.y) * .07;
+      soulB.x += (soulB.tx - soulB.x) * .07; soulB.y += (soulB.ty - soulB.y) * .07;
+    }
+
+    const dist = Math.hypot(soulB.x - soulA.x, soulB.y - soulA.y);
+    const THR = W < H ? 200 : 210;
+    const heartActive = dist < THR;
+    const cx = (soulA.x + soulB.x) / 2, cy = (soulA.y + soulB.y) / 2;
+
+    const tdist = Math.hypot(soulB.tx - soulA.tx, soulB.ty - soulA.ty);
+    if (!merged && !separating && tdist < 50) {
+      merged = true; mergeTime = now;
+      mergeLock.x = cx; mergeLock.y = cy;
+      soulA.tx = cx; soulA.ty = cy; soulB.tx = cx; soulB.ty = cy;
+    }
+
+    if (separating) {
+      const elapsed = now - separateStart;
+      const dur = 1200;
+      const t = Math.min(1, elapsed / dur);
+      heartProgress = Math.max(0, 1 - t);
+      heartFill = Math.max(0, heartFill - 0.02);
+      if (t >= 1) finishSeparation();
+    } else if (merged) {
+      const el = now - mergeTime;
+      if (el > 400) heartProgress = Math.min(1, (el - 400) / 1500);
+      if (heartProgress >= .99) heartFill = Math.min(1, heartFill + .008);
+    }
+    if ((merged || separating) && heartProgress > 0) {
+      drawBigHeart(cx, cy, heartScale, heartProgress, heartFill, now);
+    }
+
+    if (heartActive && !merged) drawThread(now, dist, THR);
 
     updateDrawParticles();
 
@@ -208,6 +294,42 @@
     placeSouls();
     initParticles();
   }
+
+  function shy(s, px, py) {
+    if (merged) return;
+    const d = Math.hypot(s.x - px, s.y - py);
+    if (d < 80) { const a = Math.atan2(s.y - py, s.x - px); s.scaredVx += Math.cos(a) * .8; s.scaredVy += Math.sin(a) * .8; s.scared = true; }
+    else s.scared = false;
+  }
+
+  let activeNode = null;
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('mousedown', e => {
+    lastInteract = performance.now();
+    if (merged) {
+      if (e.button === 2) { beginSeparation(); return; }
+      soulA.isDragging = true; soulB.isDragging = true; activeNode = soulA;
+      return;
+    }
+    const dA = Math.hypot(soulA.x - e.clientX, soulA.y - e.clientY);
+    const dB = Math.hypot(soulB.x - e.clientX, soulB.y - e.clientY);
+    if (dA < dB && dA < 70) { soulA.isDragging = true; activeNode = soulA; }
+    else if (dB < 70) { soulB.isDragging = true; activeNode = soulB; }
+  });
+  window.addEventListener('mousemove', e => {
+    lastInteract = performance.now();
+    if (activeNode) {
+      activeNode.tx = e.clientX; activeNode.ty = e.clientY;
+      if (merged) {
+        soulA.tx = e.clientX; soulA.ty = e.clientY;
+        soulB.tx = e.clientX; soulB.ty = e.clientY;
+        mergeLock.x = e.clientX; mergeLock.y = e.clientY;
+      }
+    } else { shy(soulA, e.clientX, e.clientY); shy(soulB, e.clientX, e.clientY); }
+  });
+  window.addEventListener('mouseup', () => {
+    if (activeNode) { activeNode.isDragging = false; soulA.isDragging = false; soulB.isDragging = false; activeNode = null; }
+  });
 
   window.addEventListener('resize', resize);
   resize();
