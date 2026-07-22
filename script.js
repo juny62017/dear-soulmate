@@ -36,6 +36,76 @@
     r: 255, g: 60, b: 60, scaredVx: 0, scaredVy: 0, scared: false
   };
 
+  let heartProgress = 0, heartFill = 0, heartScale = 0;
+
+  const HEART_RES = 256;
+  const hpx = new Float32Array(HEART_RES);
+  const hpy = new Float32Array(HEART_RES);
+
+  function buildHeartPts() {
+    for (let i = 0; i < HEART_RES; i++) {
+      const t = (i / HEART_RES) * Math.PI * 2;
+      hpx[i] = 16 * Math.pow(Math.sin(t), 3);
+      hpy[i] = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+    }
+  }
+
+  function computeHeartScale(now) {
+    const base = (Math.min(W, H) * 0.38) / 32;
+    const cycle = (now * 0.0013) % 1;
+    let pulse = 0;
+    if (cycle < 0.12) pulse = Math.sin((cycle / 0.12) * Math.PI);
+    else if (cycle > 0.18 && cycle < 0.35) pulse = 0.5 * Math.sin(((cycle - 0.18) / 0.17) * Math.PI);
+    return base * (1 + pulse * 0.12);
+  }
+
+  function drawBigHeart(cx, cy, hs, progress, fill, now) {
+    if (progress <= 0) return;
+    const maxMult = Math.min(W, H) * 0.88 / (32 * hs);
+    const BM = Math.min(1.9, maxMult);
+    const s = hs * BM;
+    const pts = Math.min(HEART_RES, (progress * HEART_RES + 1) | 0);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    ctx.beginPath();
+    ctx.moveTo(hpx[0] * s, hpy[0] * s);
+    for (let i = 1; i < pts; i++) ctx.lineTo(hpx[i] * s, hpy[i] * s);
+    if (progress >= .99) ctx.closePath();
+
+    if (fill > 0) {
+      const fillPulse = Math.sin(now * .005) * 0.2 + 0.8;
+      ctx.fillStyle = `rgba(220, 20, 60, ${fill * fillPulse})`;
+      ctx.fill();
+    }
+
+    const strokeAlpha = progress >= .99
+      ? 0.7 + Math.sin(now * .003) * .3
+      : 0.8;
+    ctx.strokeStyle = `rgba(255,100,100,${strokeAlpha.toFixed(3)})`;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = 'rgba(255, 0, 0, 1)';
+    ctx.shadowBlur = 25;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(hpx[0] * s, hpy[0] * s);
+    for (let i = 1; i < pts; i++) ctx.lineTo(hpx[i] * s, hpy[i] * s);
+    if (progress >= .99) ctx.closePath();
+    const glowGrad = ctx.createLinearGradient(-s * 16, 0, s * 16, 0);
+    glowGrad.addColorStop(0, 'rgba(255,0,0,.8)');
+    glowGrad.addColorStop(.5, 'rgba(255,100,100,.8)');
+    glowGrad.addColorStop(1, 'rgba(255,0,0,.8)');
+    ctx.strokeStyle = glowGrad;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
   const N = 350, F = 10;
   const pA = new Float32Array(N * F), pB = new Float32Array(N * F);
   const ptBuf = new Float32Array(N * 3);
@@ -114,6 +184,7 @@
     ctx.fillRect(0, 0, W, H);
 
     drawStars(now);
+    heartScale = computeHeartScale(now);
 
     soulA.x += (soulA.tx - soulA.x) * .07; soulA.y += (soulA.ty - soulA.y) * .07;
     soulB.x += (soulB.tx - soulB.x) * .07; soulB.y += (soulB.ty - soulB.y) * .07;
@@ -132,6 +203,7 @@
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#00000f'; ctx.fillRect(0, 0, W, H);
+    buildHeartPts();
     initStars();
     placeSouls();
     initParticles();
