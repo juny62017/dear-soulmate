@@ -36,7 +36,7 @@
     r: 255, g: 60, b: 60, scaredVx: 0, scaredVy: 0, scared: false
   };
 
-  let merged = false, mergeTime = 0, lastInteract = 0;
+  let merged = false, mergeTime = 0, lastBeatT = 0, lastInteract = 0;
   let separating = false, separateStart = 0;
   const mergeLock = { x: 0, y: 0 };
   let heartProgress = 0, heartFill = 0, heartScale = 0;
@@ -61,6 +61,7 @@
     separating = false;
     merged = false;
     heartProgress = 0; heartFill = 0;
+    nebN = 0; fhN = 0; swN = 0;
     const cx = mergeLock.x, cy = mergeLock.y;
     if (W < H) {
       soulA.x = cx; soulA.y = cy - H * .2; soulA.tx = soulA.x; soulA.ty = soulA.y;
@@ -140,6 +141,142 @@
     ctx.restore();
   }
 
+  const MN = 14;
+  const nX = new Float32Array(MN), nY = new Float32Array(MN),
+    nVX = new Float32Array(MN), nVY = new Float32Array(MN),
+    nR = new Float32Array(MN), nAl = new Float32Array(MN),
+    nD = new Float32Array(MN), nHue = new Uint8Array(MN);
+  let nebN = 0;
+  function spawnNebulas(x, y) {
+    for (let i = 0; i < MN; i++) {
+      nX[i] = x; nY[i] = y;
+      nVX[i] = (Math.random() - .5) * 3; nVY[i] = (Math.random() - .5) * 3 - 1;
+      nR[i] = Math.random() * 50 + 20; nAl[i] = .22;
+      nD[i] = Math.random() * .004 + .002; nHue[i] = Math.random() > .5 ? 1 : 0;
+    }
+    nebN = MN;
+  }
+  function drawNebulas() {
+    if (!nebN) return;
+    ctx.globalCompositeOperation = 'screen';
+    let alive = 0;
+    for (let i = 0; i < nebN; i++) {
+      nX[i] += nVX[i]; nY[i] += nVY[i]; nVX[i] *= .99; nVY[i] *= .99;
+      nR[i] += .35; nAl[i] -= nD[i];
+      if (nAl[i] <= 0) continue;
+      if (alive < i) {
+        nX[alive] = nX[i]; nY[alive] = nY[i]; nVX[alive] = nVX[i]; nVY[alive] = nVY[i];
+        nR[alive] = nR[i]; nAl[alive] = nAl[i]; nD[alive] = nD[i]; nHue[alive] = nHue[i];
+      }
+      const g = ctx.createRadialGradient(nX[alive], nY[alive], 0, nX[alive], nY[alive], nR[alive]);
+      g.addColorStop(0, `hsla(${nHue[alive] ? 350 : 10},100%,72%,${nAl[alive].toFixed(3)})`);
+      g.addColorStop(1, 'hsla(0,0%,0%,0)');
+      ctx.beginPath(); ctx.arc(nX[alive], nY[alive], nR[alive], 0, 6.2832);
+      ctx.fillStyle = g; ctx.fill(); alive++;
+    }
+    nebN = alive;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  const MSW = 3;
+  const swX = new Float32Array(MSW), swY = new Float32Array(MSW),
+    swR = new Float32Array(MSW), swA = new Float32Array(MSW), swMR = new Float32Array(MSW);
+  let swN = 0;
+  function spawnSW(x, y, maxR, a) {
+    if (swN >= MSW) return;
+    swX[swN] = x; swY[swN] = y; swR[swN] = 0; swA[swN] = a; swMR[swN] = maxR; swN++;
+  }
+  function drawSW() {
+    if (!swN) return;
+    let alive = 0;
+    for (let i = 0; i < swN; i++) {
+      swR[i] += swMR[i] * .043; swA[i] -= .025;
+      if (swA[i] <= 0) continue;
+      if (alive < i) { swX[alive] = swX[i]; swY[alive] = swY[i]; swR[alive] = swR[i]; swA[alive] = swA[i]; swMR[alive] = swMR[i]; }
+      ctx.beginPath(); ctx.arc(swX[alive], swY[alive], swR[alive], 0, 6.2832);
+      ctx.strokeStyle = `rgba(255,200,240,${swA[alive].toFixed(3)})`;
+      ctx.lineWidth = 2; ctx.stroke(); alive++;
+    }
+    swN = alive;
+  }
+
+  const MFH = 50;
+  const fX = new Float32Array(MFH), fY = new Float32Array(MFH),
+    fVX = new Float32Array(MFH), fVY = new Float32Array(MFH),
+    fS = new Float32Array(MFH), fA = new Float32Array(MFH),
+    fD = new Float32Array(MFH), fC = new Uint8Array(MFH);
+  let fhN = 0;
+  function spawnFH(x, y, count) {
+    for (let i = 0; i < count && fhN < MFH; i++, fhN++) {
+      fX[fhN] = x; fY[fhN] = y;
+      fVX[fhN] = (Math.random() - .5) * 4; fVY[fhN] = -Math.random() * 5 - 1.5;
+      fS[fhN] = Math.random() * 9 + 4; fA[fhN] = 1;
+      fD[fhN] = Math.random() * .013 + .007; fC[fhN] = Math.random() > .5 ? 1 : 0;
+    }
+  }
+  function drawHeartShape(x, y, s, col) {
+    ctx.fillStyle = col; ctx.beginPath();
+    ctx.moveTo(x, y - s * .25);
+    ctx.bezierCurveTo(x - s * .5, y - s * .75, x - s, y - s * .33, x - s, y);
+    ctx.bezierCurveTo(x - s, y + s * .5, x - s * .33, y + s * .83, x, y + s);
+    ctx.bezierCurveTo(x + s * .33, y + s * .83, x + s, y + s * .5, x + s, y);
+    ctx.bezierCurveTo(x + s, y - s * .33, x + s * .5, y - s * .75, x, y - s * .25);
+    ctx.closePath(); ctx.fill();
+  }
+  function drawFH() {
+    let alive = 0;
+    for (let i = 0; i < fhN; i++) {
+      fX[i] += fVX[i]; fY[i] += fVY[i]; fVX[i] *= .96; fVY[i] *= .97; fA[i] -= fD[i];
+      if (fA[i] <= 0) continue;
+      if (alive < i) {
+        fX[alive] = fX[i]; fY[alive] = fY[i]; fVX[alive] = fVX[i]; fVY[alive] = fVY[i];
+        fS[alive] = fS[i]; fA[alive] = fA[i]; fD[alive] = fD[i]; fC[alive] = fC[i];
+      }
+      ctx.globalAlpha = fA[alive];
+      drawHeartShape(fX[alive], fY[alive], fS[alive], fC[alive] ? '#ff1493' : '#ff0000');
+      alive++;
+    }
+    fhN = alive; ctx.globalAlpha = 1;
+  }
+
+  const MP = 25;
+  const pX = new Float32Array(MP), pY = new Float32Array(MP),
+    pVX = new Float32Array(MP), pVY = new Float32Array(MP),
+    pS = new Float32Array(MP), petalA = new Float32Array(MP),
+    pRot = new Float32Array(MP), pRS = new Float32Array(MP);
+  let pN = 0;
+  function spawnPetal() {
+    if (pN >= MP) return;
+    pX[pN] = Math.random() * W; pY[pN] = -20;
+    pVX[pN] = (Math.random() - 0.5) * 2; pVY[pN] = Math.random() * 2 + 1;
+    pS[pN] = Math.random() * 6 + 6; petalA[pN] = Math.random() * 6.28;
+    pRot[pN] = Math.random() * 6.28; pRS[pN] = (Math.random() - 0.5) * 0.1;
+    pN++;
+  }
+  function drawPetals() {
+    let alive = 0;
+    for (let i = 0; i < pN; i++) {
+      pX[i] += pVX[i] + Math.sin(petalA[i]) * 0.5; pY[i] += pVY[i];
+      petalA[i] += 0.02; pRot[i] += pRS[i];
+      if (pY[i] > H + 20) continue;
+      if (alive !== i) {
+        pX[alive] = pX[i]; pY[alive] = pY[i]; pVX[alive] = pVX[i]; pVY[alive] = pVY[i];
+        pS[alive] = pS[i]; petalA[alive] = petalA[i]; pRot[alive] = pRot[i]; pRS[alive] = pRS[i];
+      }
+      ctx.save();
+      ctx.translate(pX[alive], pY[alive]); ctx.rotate(pRot[alive]); ctx.scale(1, Math.abs(Math.sin(petalA[alive])));
+      ctx.fillStyle = '#ff1493'; ctx.shadowColor = 'rgba(255,20,100,0.5)'; ctx.shadowBlur = 5;
+      ctx.beginPath(); ctx.moveTo(0, -pS[alive]);
+      ctx.quadraticCurveTo(pS[alive], -pS[alive], pS[alive], 0);
+      ctx.quadraticCurveTo(pS[alive], pS[alive], 0, pS[alive]);
+      ctx.quadraticCurveTo(-pS[alive], pS[alive], -pS[alive], 0);
+      ctx.quadraticCurveTo(-pS[alive], -pS[alive], 0, -pS[alive]);
+      ctx.fill(); ctx.restore();
+      alive++;
+    }
+    pN = alive;
+  }
+
   const N = 350, F = 10;
   const pA = new Float32Array(N * F), pB = new Float32Array(N * F);
   const ptBuf = new Float32Array(N * 3);
@@ -157,14 +294,19 @@
     for (let i = 0; i < N; i++) { resetP(pA, i, soulA.x, soulA.y); resetP(pB, i, soulB.x, soulB.y); }
   }
 
-  function updateDrawParticles() {
+  function updateDrawParticles(heartActive, cx, cy, hs) {
     ctx.globalCompositeOperation = 'screen';
     let c = 0;
     for (let i = 0; i < N; i++) {
       const o = i * F; let vx = pA[o + 2], vy = pA[o + 3];
-      pA[o + 7] += pA[o + 9];
-      vx += (soulA.x + Math.cos(pA[o + 7]) * pA[o + 8] - pA[o]) * .04;
-      vy += (soulA.y + Math.sin(pA[o + 7]) * pA[o + 8] - pA[o + 1]) * .04;
+      if (heartActive) {
+        const hi = (i * 7) & (HEART_RES - 1);
+        vx += (cx + hpx[hi] * hs - pA[o]) * .009; vy += (cy + hpy[hi] * hs - pA[o + 1]) * .009;
+      } else {
+        pA[o + 7] += pA[o + 9];
+        vx += (soulA.x + Math.cos(pA[o + 7]) * pA[o + 8] - pA[o]) * .04;
+        vy += (soulA.y + Math.sin(pA[o + 7]) * pA[o + 8] - pA[o + 1]) * .04;
+      }
       pA[o + 2] = vx * .88; pA[o + 3] = vy * .88; pA[o] += pA[o + 2]; pA[o + 1] += pA[o + 3];
       pA[o + 4] -= pA[o + 5];
       if (pA[o + 4] <= 0) { resetP(pA, i, soulA.x, soulA.y); continue; }
@@ -176,9 +318,14 @@
     c = 0;
     for (let i = 0; i < N; i++) {
       const o = i * F; let vx = pB[o + 2], vy = pB[o + 3];
-      pB[o + 7] += pB[o + 9];
-      vx += (soulB.x + Math.cos(pB[o + 7]) * pB[o + 8] - pB[o]) * .04;
-      vy += (soulB.y + Math.sin(pB[o + 7]) * pB[o + 8] - pB[o + 1]) * .04;
+      if (heartActive) {
+        const hi = ((i + 128) * 7) & (HEART_RES - 1);
+        vx += (cx + hpx[hi] * hs - pB[o]) * .009; vy += (cy + hpy[hi] * hs - pB[o + 1]) * .009;
+      } else {
+        pB[o + 7] += pB[o + 9];
+        vx += (soulB.x + Math.cos(pB[o + 7]) * pB[o + 8] - pB[o]) * .04;
+        vy += (soulB.y + Math.sin(pB[o + 7]) * pB[o + 8] - pB[o + 1]) * .04;
+      }
       pB[o + 2] = vx * .88; pB[o + 3] = vy * .88; pB[o] += pB[o + 2]; pB[o + 1] += pB[o + 3];
       pB[o + 4] -= pB[o + 5];
       if (pB[o + 4] <= 0) { resetP(pB, i, soulB.x, soulB.y); continue; }
@@ -255,6 +402,9 @@
       merged = true; mergeTime = now;
       mergeLock.x = cx; mergeLock.y = cy;
       soulA.tx = cx; soulA.ty = cy; soulB.tx = cx; soulB.ty = cy;
+      spawnNebulas(cx, cy); spawnFH(cx, cy, 22);
+      spawnSW(cx, cy, Math.max(W, H) * .72, .82);
+      spawnSW(cx, cy, Math.max(W, H) * .46, .42);
     }
 
     if (separating) {
@@ -273,9 +423,16 @@
       drawBigHeart(cx, cy, heartScale, heartProgress, heartFill, now);
     }
 
+    drawSW();
     if (heartActive && !merged) drawThread(now, dist, THR);
+    drawNebulas();
+    updateDrawParticles(heartActive, cx, cy, heartScale);
+    drawFH();
 
-    updateDrawParticles();
+    if (merged && !separating && now - lastBeatT > 700) { lastBeatT = now; spawnFH(cx, cy, 2); }
+    if (merged && Math.random() > 0.9) spawnPetal();
+
+    drawPetals();
 
     ctx.globalCompositeOperation = 'screen';
     drawSoul(soulA, now); drawSoul(soulB, now);
