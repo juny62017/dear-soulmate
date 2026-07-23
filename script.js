@@ -1,6 +1,16 @@
 (() => {
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d', { alpha: false });
+  const finaleEl = document.getElementById('finale');
+  const hintEl = document.getElementById('hint');
+  const titleEl = document.getElementById('title');
+  const letterBtn = document.getElementById('letterBtn');
+  const letterModal = document.getElementById('letterModal');
+  const closeLetter = document.querySelector('.close-letter');
+
+  letterBtn.addEventListener('click', () => { letterModal.classList.add('open'); });
+  closeLetter.addEventListener('click', () => { letterModal.classList.remove('open'); });
+  letterModal.addEventListener('click', (e) => { if (e.target === letterModal) letterModal.classList.remove('open'); });
 
   let W, H, dpr;
   let tiltX = 0, tiltY = 0;
@@ -55,6 +65,11 @@
     if (!merged || separating) return;
     separating = true;
     separateStart = performance.now();
+    finaleEl.classList.remove('visible');
+    hintEl.style.opacity = '0';
+    document.getElementById('replayBtn').classList.remove('visible');
+    letterBtn.classList.remove('visible');
+    letterModal.classList.remove('open');
   }
 
   function finishSeparation() {
@@ -71,6 +86,23 @@
       soulB.x = cx + W * .2; soulB.y = cy; soulB.tx = soulB.x; soulB.ty = soulB.y;
     }
     initParticles();
+
+    hintEl.textContent = 'drag the souls together ✦';
+    hintEl.style.opacity = '1';
+    titleEl.style.opacity = '1';
+  }
+
+  function resetAll() {
+    separating = false;
+    merged = false; heartProgress = 0; heartFill = 0;
+    nebN = 0; fhN = 0; swN = 0;
+    finaleEl.classList.remove('visible');
+    hintEl.textContent = 'drag the souls together ✦';
+    hintEl.style.opacity = '1'; titleEl.style.opacity = '1';
+    document.getElementById('replayBtn').classList.remove('visible');
+    letterBtn.classList.remove('visible');
+    letterModal.classList.remove('open');
+    placeSouls(); initParticles();
   }
 
   const HEART_RES = 256;
@@ -367,6 +399,19 @@
     drawStars(now);
     heartScale = computeHeartScale(now);
 
+    const idle = now - lastInteract;
+    if (idle > 2000 && !soulA.isDragging && !soulB.isDragging && !merged) {
+      const t = (idle - 2000) * .001;
+      const amp = Math.min(1, t / 0.8);
+      if (W < H) {
+        soulA.tx = W * .5 + Math.cos(t * .9) * 24 * amp; soulA.ty = H * .28 + Math.sin(t * 1.1) * 18 * amp;
+        soulB.tx = W * .5 - Math.cos(t * .9) * 24 * amp; soulB.ty = H * .72 + Math.cos(t * 1.1) * 18 * amp;
+      } else {
+        soulA.tx = W * .28 + Math.cos(t * 1.1) * 24 * amp; soulA.ty = H * .5 + Math.sin(t * .9) * 18 * amp;
+        soulB.tx = W * .72 - Math.cos(t * 1.1) * 24 * amp; soulB.ty = H * .5 - Math.sin(t * .9) * 18 * amp;
+      }
+    }
+
     if (!merged) {
       for (const s of [soulA, soulB]) {
         if (!s.isDragging) {
@@ -405,6 +450,23 @@
       spawnNebulas(cx, cy); spawnFH(cx, cy, 22);
       spawnSW(cx, cy, Math.max(W, H) * .72, .82);
       spawnSW(cx, cy, Math.max(W, H) * .46, .42);
+      setTimeout(() => {
+        finaleEl.classList.add('visible');
+        document.getElementById('replayBtn').classList.add('visible');
+        hintEl.textContent = 'pull apart with two fingers to separate ✦';
+        hintEl.style.opacity = '1';
+
+        letterBtn.style.transition = 'none';
+        letterBtn.style.left = cx + 'px';
+        letterBtn.style.top = cy + 'px';
+        letterBtn.style.transform = 'translate(-50%, -50%) scale(0)';
+        void letterBtn.offsetWidth;
+
+        letterBtn.style.transition = 'transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1), top 1.5s cubic-bezier(0.2, 0.8, 0.2, 1), left 1.5s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.5s ease';
+        letterBtn.style.top = 'calc(100% - 120px)';
+        letterBtn.style.left = '50%';
+        letterBtn.classList.add('visible');
+      }, 900);
     }
 
     if (separating) {
@@ -560,7 +622,14 @@
     }
   });
 
+  window.addEventListener('deviceorientation', e => { tiltX = (e.gamma || 0) * .5; tiltY = (e.beta || 0) * .25; });
   window.addEventListener('resize', resize);
+  document.getElementById('replayBtn').addEventListener('click', () => {
+    finaleEl.classList.remove('visible');
+    document.getElementById('replayBtn').classList.remove('visible');
+    setTimeout(() => resetAll(), 400);
+  });
+
   resize();
   requestAnimationFrame(render);
 })();
